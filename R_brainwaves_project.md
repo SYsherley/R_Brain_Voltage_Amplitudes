@@ -152,11 +152,6 @@ library(lpSolve)
 library(irr)
 library(report)
 library(sjPlot)
-```
-
-    ## Learn more about sjPlot with 'browseVignettes("sjPlot")'.
-
-``` r
 library(sjmisc)
 ```
 
