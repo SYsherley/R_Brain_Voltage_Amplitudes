@@ -3,18 +3,30 @@ Brain Wave Analysis
 SYsherley
 2023-08-17
 
-## R Markdown
+### Context
 
-This is an R Markdown document. Markdown is a simple formatting syntax
-for authoring HTML, PDF, and MS Word documents. For more details on
-using R Markdown see <http://rmarkdown.rstudio.com>.
+This R Markdown document demonstrates a simplified process for analyzing
+a brainwave dataset collected from a group of non-native speakers during
+a linguistic experiment involving speech production.
 
-### Analysis procedure:
+The dataset comprises voltage amplitudes recorded from 32 brain regions,
+spanning from -200 ms to 3,000 ms post-stimulus onset for each speaker.
+
+The simplified process presented in this document involves checking the
+potential sources of effects in the brain waves, specifying a potential
+region-of-interest and time window. Then, moving forward to creating a
+grand averaged line graph plot to visualize the difference between
+voltage amplitudes elicited by conditions, and finally conducting linear
+mixed effects models to assess the statistical significance of each
+factor’s impact on amplitudes within the specified region-of-interest
+and time window.
+
+### Analysis process:
 
 1.  Import libraries
 2.  Load dataset
-3.  Permutation test
-4.  Line graph
+3.  Permutation test (permu.test())
+4.  Line graph (ggplot())
 5.  Linear Mixed Effects Model
 
 ``` r
@@ -292,7 +304,7 @@ library(olsrr)
     ## 
     ##     rivers
 
-### Load dataset
+#### Load dataset
 
 dataset: EEGL2 Note: this dataset has been processed. Here ignored the
 data cleaning process because it related to personal information.
@@ -326,16 +338,14 @@ head(braindata, 3) # show 3 rows
     ## #   descrip <chr>, Subject <chr>, Gender <chr>, Semantic <chr>,
     ## #   Condition <chr>, Item <chr>
 
-### Permutation test
+#### Permutation test
 
 Running permutation tests to find out the potential sources of G and S
 effects. For instance, the distribution of effects among the brain and
 the potential time window.
 
-``` r
-# select -100 - 1000 ms
-braindataPerm<-braindata[braindata$time >=-100 & braindata$time <=1000,]
-```
+    # select -100 - 1000 ms
+    braindataPerm<-braindata[braindata$time >=-100 & braindata$time <=1000,]
 
     # permutation. S+ vs S-
     permtest_S<-permu.test(cbind(FC1,FC5,C3,CP1,CP5,P7,P3,Pz,PO3,O1,Oz,O2,PO4,
@@ -359,61 +369,219 @@ braindataPerm<-braindata[braindata$time >=-100 & braindata$time <=1000,]
                             high = "red") +
         ggtitle("SL2") +
         theme_minimal()
-    ) # save final plot as png or similar
+    ) # save final plot as png
     permutes_interactive_S
 
-![permutation S](Permu_S.png)
+![permuta S](Permu_S.png)
 
-    permutation. G+ vs G-
+    # permutation. G+ vs G-
+    permtest_G<-permu.test(cbind(FC1,FC5,C3,CP1,CP5,P7,P3,Pz,PO3,O1,Oz,
+                                 O2,PO4,P4,P8,CP6,CP2,C4,FC6,FC2,Cz,F3,F4,F7,F8,Fz) # 26
+                           ~ G|time, data = braindataPerm)
+    plot(permtest_G)
 
-## G+ vs G-
+    unique(permtest_G$time) # -100 is now 1 etc. - rescale using scales package
+    permtest_G$time <- as.numeric(as.character(permtest_G2$time))
+    permtest_G$time <- scales::rescale(x = permtest_G2$time, to = c(-100, 1200))
 
-permtest_G\<-permu.test(cbind(FC1,FC5,C3,CP1,CP5,P7,P3,Pz,PO3,O1,Oz,
-O2,PO4,P4,P8,CP6,CP2,C4,FC6,FC2,Cz,F3,F4,F7,F8,Fz) \# 26 \~
-Gender\|time, data = EnDuN18Perm) plot(permtest_G)
+    permutes_interactive_G <- ggplotly(
+      permtest_G %>%
+        mutate(time = as.numeric(as.character(time)))  %>%
+        ggplot(aes(x = time,
+                   y = Measure,
+                   fill = F)) +
+        scale_x_continuous(breaks = c(-100,0,100,150,220,250,300,350,400,450,500,600,700,800,900,1000))+
+        geom_tile() +
+        scale_fill_gradient(low = "yellow", # exchange colours if you like
+                            high = "red") +
+        ggtitle("G") +
+        theme_minimal()
+    ) # save final plot as png 
+    permutes_interactive_G 
 
-permtest_G2\<-permu.test(cbind(FC1,FC5,C3,CP1,CP5,P7,P3,Pz,PO3,O1,Oz,
-O2,PO4,P4,P8,CP6,CP2,C4,FC6,FC2,Cz,F3,F4,F7,F8,Fz) \# 26 \~
-Gender\|time, data = EnDuN18Perm2) plot(permtest_G2)
+![permutation G](Permu_G.png)
 
-unique(permtest_G2$time) # 300 is now 1 etc. - rescale using scales package permtest_G2$time
-\<- as.numeric(as.character(permtest_G2$time)) permtest_G2$time \<-
-scales::rescale(x = permtest_G2\$time, to = c(-100, 1200))
+From the plot, we can see that the potential S effect could be found in
+the time window of around 400 ms. Moreover, there appears to be no G
+effect. The potential S effect is distributed around centro-parietal
+regions. Here we select 10 electrodes C3, C4, Cz \| CP1, CP2, CP5, CP6
+\| P3, P4, and Pz to create a line graph.
 
-permutes_interactive_G2 \<- ggplotly( permtest_G2 %\>% mutate(time =
-as.numeric(as.character(time))) %\>% ggplot(aes(x = time, y = Measure,
-fill = F)) + scale_x\_continuous(breaks =
-c(-100,0,100,150,220,250,300,350,400,450,500,600,700,800,900,1000))+
-geom_tile() + scale_fill_gradient(low = “yellow”, \# exchange colours if
-you like high = “red”) + ggtitle(“G”) + theme_minimal() ) \# save final
-plot as png or similar permutes_interactive_G2
+#### Line graph
 
-# 
+    # Preparation
+    # reorder column names
+    colnames(braindata) # Get column names
+    braindata <-braindata [, c("Subject" , "G", "S","Condition", "descrip","Item",
+                                   "time", "Fp1","AF3","F7","F3","FC1","FC5","C3","CP1","CP5",
+                                   "P7","P3","Pz","PO3","O1","Oz","O2","PO4","P4","P8",
+                                   "CP6","CP2","C4","FC6","FC2","F4","F8","AF4","Fp2", "Fz","Cz")]
 
-# select -100 - 1000 ms
+    # from 'wide' to 'long'
+    braindata_long <- gather(braindata, Channel, Amplitude, Fp1:Cz, factor_key=TRUE) # have a long formate
 
-EnDu_N3Perm\<-EnDu_N3\[EnDu_N3$time >=-100 & EnDu_N3$time \<=1200,\]
+    # remove time>800 
+    braindata_long<-braindata_long[braindata_long$time <=800,]
 
-## semantic permutation. G+ vs G-
+    # from 'long' to 'wide'
+    braindata_long2<-spread(braindata, time, Amplitude) 
 
-permtestN3_G\<-permu.test(cbind(FC1,FC5,C3,CP1,CP5,P7,P3,Pz,PO3,O1,Oz,O2,PO4,
-P4,P8,CP6,CP2,C4,FC6,FC2,Cz,F3,F4,F7,F8,Fz) \# 26.without
-Fp1,Fp2,AF3,AF4,T7,T8 \~ Gender\|time, data = EnDu_N3Perm)
-plot(permtestN3_G)
 
-unique(permtestN3_G$time) # 300 is now 1 etc. - rescale using scales package permtestN3_G$time
-\<- as.numeric(as.character(permtestN3_G$time)) permtestN3_G$time \<-
-scales::rescale(x = permtestN3_G\$time, to = c(-100, 1200))
+    braindata_long2$S<-as.factor(as.character(braindata_long2$S))
+    braindata_long2$G<-as.factor(as.character(braindata_long2$G))
+    braindata_long2$Condition<-as.factor(as.character(braindata_long2$Condition))
 
-permutes_interactive_G \<- ggplotly( permtestN3_G %\>% mutate(time =
-as.numeric(as.character(time))) %\>% ggplot(aes(x = time, y = Measure,
-fill = F)) + scale_x\_continuous(breaks =
-c(-100,0,100,150,220,250,300,350,400,450,500,600,700,800,900,1000))+
-geom_tile() + scale_fill_gradient(low = “yellow”, \# exchange colours if
-you like high = “red”) + ggtitle(“G EnDuL2N3”) + theme_minimal() ) \#
-save final plot as png or similar permutes_interactive_G \`\`\`
+    # select 10 electrodes
+    # C3, C4, Cz | CP1, CP2, CP5, CP6| P3, P4, Pz
+    roiCP_10N4<-c("C3","C4","Cz","CP1","CP2","CP5","CP6","P3","P4","Pz")
 
-## Including Plots
+    braindata_long_10N4 <- braindata_long2 %>%
+      filter(Channel %in% roiCP_10N4)  
+    braindata_long_10N4$Channel<-as.factor(as.character(braindata_long_10N4$Channel))
+    levels(braindata_long_10N4$Channel) # 10
 
-Note that the `echo = FALSE` parameter was added to the code chunk to
-prevent printing of the R code that generated the plot.
+    # Group roiCP_10N4 channels (10 CP) by informative variables
+
+    # Group by S: 
+    braindata_long_10N4S <- braindata_long_10N4 %>%
+      group_by(Subject,S) %>%
+      summarise_at(vars(names(.)[8:ncol(.)]), list(~ mean(., na.rm = TRUE))) %>%
+      ungroup() 
+
+    braindata_long_10N4Semantic$S<-as.factor(character(braindata_long_10N4S$S))
+    levels(braindata_long_10N4Semantic$S)
+
+    # S df: braindata_long_10N4S
+    braindata_long_10N4S_CP<- braindata_long_10N4S %>% 
+      pivot_longer(-c(Subject,S), names_to = "Time", values_to = "Amplitude") %>%
+      mutate(Time = as.numeric(Time))
+    meanbraindata_long_10N4S_CPPlot<- braindata_long_10N4S_CP %>% group_by(S,Time)%>% 
+      dplyr::summarise(
+        Mean_Amplitude = mean(Amplitude),
+        CIlower = Rmisc::CI(Amplitude, ci = 0.95)["lower"],
+        CIupper = Rmisc::CI(Amplitude, ci = 0.95)["upper"])
+
+    # 10 Semantic
+    S_10CP_Plot <- ggplot(meanbraindata_long_10N4Semantic_CPPlot, aes(x = Time, y = Mean_Amplitude, 
+                                                                  colour = S,
+                                                                  group = S)) + 
+      #geom_ribbon(aes(ymin = CIlower, ymax = CIupper, fill = S), 
+                  #alpha = 0.1, linetype = 0) + 
+      scale_y_continuous(trans = "reverse",                 # reverse the y-axis 
+                         breaks = seq(-10,10,1),            # customize the scale
+                         labels = paste0(seq(-10,10,1))) +
+      geom_line(linewidth = 0.7) 
+    S_10CP_Plot
+
+    S_10CP_Plot1<-S_10CP_Plot+ 
+      scale_color_manual(name = "S", values=c('#00BFC4','#F8766D')) +   
+      scale_fill_manual(name = "S", values=c('#00BFC4','#F8766D')) + 
+      scale_x_continuous(breaks = c(0,100,240,400,480,600,800)) + 
+      #scale_y_continuous(breaks = c(seq(-2,-1,1), seq(1,6,1))) + 
+      coord_cartesian() +
+      labs(title = "Centro-parietal Regions",
+           x = "Time (ms)", 
+           y = "Amplitude (?V)") + 
+      geom_vline(xintercept = 0,linetype = "dashed" )+ 
+      geom_hline(yintercept = 0,linetype = "solid")+
+      annotate("rect", xmin = 240, xmax = 480, ymin = 10, ymax = -5,
+               alpha = .2)+
+      theme_norment(ticks = TRUE, grid = TRUE)+
+      theme(
+        legend.position = "right")+
+      theme(panel.border = element_blank(),
+            #strip.background = element_blank(),
+            #panel.grid.major = element_blank()#, 
+            panel.grid.minor = element_blank()
+      )+
+      theme(axis.title.x = element_text(size=14,family="serif"), # font
+            axis.text.x = element_text(size=14,family="serif"),
+            axis.title.y = element_text(size=14,family="serif"),
+            axis.text.y = element_text(size=14,family="serif"),
+            legend.title = element_text(size=18,family="serif"),
+            legend.text = element_text(size=17,family="serif"),
+            plot.title=element_text(size=18,family="serif",face = "plain"))
+    S_10CP_Plot1+ geom_line(linewidth = 1)
+
+    ggsave("L2_CP(10)S.png", width = 20, height = 12, units = "cm")
+
+<figure>
+<img src="L2_CP(10)S.png" style="width:50.0%" alt="line graph_S" />
+<figcaption aria-hidden="true">line graph_S</figcaption>
+</figure>
+
+This graph shows S voltage amplitudes for centro-parietal channels C3,
+C4, Cz, CP1, CP2, CP5, CP6, P3, P4, and Pz. The N400 time window of
+interest from 240 ms to 480 ms is highlighted in grey. Note that
+negative voltage amplitudes are plotted upwards. Voltage amplitudes for
+the Un condition were more negative compared to the Rel condition.
+
+#### LMM
+
+    # preparation: 
+    braindata_2<-braindata
+    ## working df: braindata_2
+
+    # region: C3, C4, Cz | CP1, CP2, CP5, CP6 | P3, P4, Pz  # 10
+
+    # Centro-posterior_N4
+    braindata_2$Amplitude_4CP_L<-rowMeans(braindata_2[,c('C3','CP1','CP5','P3')]) 
+    braindata_2$Amplitude_4CP_R<-rowMeans(braindata_2[,c('C4','CP2','CP6','P4')])
+    braindata_2$Amplitude_2CP_M<-rowMeans(braindata_2[,c('Cz','Pz')])
+
+    # 4 ROIs
+    braindata_4CP_L<-EnDuN18_2[,c('Amplitude_4CP_L','time','Subject','Item','descrip','G','S','Condition')]
+    braindata_4CP_R<-EnDuN18_2[,c('Amplitude_4CP_R','time','Subject','Item','descrip','G','S','Condition')]
+    braindata_2CP_M<-EnDuN18_2[,c('Amplitude_2CP_M','time','Subject','Item','descrip','G','S','Condition')]
+
+
+    # add hemisphere information
+    braindata_4CP_L$Hemisphere<-c("left")
+    braindata_4CP_R$Hemisphere<-c("right")
+    braindata_2CP_M$Hemisphere<-c("midline")
+
+    braindata_4CP_L<-rename(braindata_4CP_L, Amplitude=Amplitude_4CP_L)
+    braindata_4CP_R<-rename(braindata_4CP_R, Amplitude=Amplitude_4CP_R)
+    braindata_2CP_M<-rename(braindata_2CP_M, Amplitude=Amplitude_2CP_M)
+
+    # rebind 3 ROIs. 
+    braindata_3ROI10<-rbind(braindata_4CP_L,braindata_4CP_R,braindata_2CP_M) 
+
+    # LMM
+    # Time window: 250-450ms. 
+    # 10CP: C3, C4, Cz | CP1, CP2, CP5, CP6 | P3, P4, Pz 
+    # working df: braindata_3ROI10
+
+    # 250-450
+    braindata_3ROI10_1<-braindata_3ROI10[braindata_3ROI10$time >=250 & braindata_3ROI10$time <=450,]
+
+    # maximal: 
+    lmm_1.0<-lmer(Amplitude ~ G * S + Hemisphere +(S * G|Subject)+(1|Item),
+                                braindata_3ROI10_1, REML=F) 
+    summary(lmm_1.0)
+
+    # remove by-sub interaction: 
+    lmm_1.1<-lmer(Amplitude ~ G * S + Hemisphere + (S + G|Subject)+(1|Item),
+                                  braindata_3ROI10_1, REML=F) 
+    summary(lmm_1.1)
+    anova(lmm_1.1,lmm_1.0)# keep 1.0
+    rm(lmm_1.1)
+
+
+    # remove interaction: 
+    lmm_1.2<-lmer(Amplitude ~ G + S + Hemisphere + (S * G|Subject)+(1|Item),
+                                  braindata_3ROI10_1, REML=F) # keep this
+    summary(lmm_1.2)
+    anova(lmm_1.2,lmm_1.0)# keep 2
+    # lmm_1.2   17 3355174 3355361 -1677570  3355140                     
+    # lmm_1.0   18 3355176 3355373 -1677570  3355140 0.0276  1     0.8681
+    # Chisq = 0.0276. p = 0.8681
+
+
+    # remove interaction by subject
+    lmm_1.3<-lmer(Amplitude ~ G + S + Hemisphere + (S + G|Subject)+(1|Item),
+                                  braindata_3ROI10_1, REML=F) # failed
+    rm(lmm_1.3)
+    rm(lmm_1.0)
+
+    tab_model(lmm_1.2, show.se = T, show.stat = TRUE, digits = 3,transform = NULL)
